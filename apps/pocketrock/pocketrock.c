@@ -1,22 +1,17 @@
 #include "config.h"
-#include "action.h"
 #include "button.h"
 #include "core_alloc.h"
 #include "file.h"
 #include "kernel.h"
 #include "lcd.h"
-#include "menu.h"
 #include "plugin.h"
 #include "powermgmt.h"
-#include "splash.h"
 #include "system.h"
-#include "tree.h"
-#include "icon.h"
 #include "gui/usb_screen.h"
 #include "pocketrock.h"
 #include "theme.h"
 
-#define POCKETROCK_ARENA_MAX (16u * 1024u * 1024u)
+#define POCKETROCK_ARENA_MAX (8u * 1024u * 1024u)
 #define POCKETROCK_DIR ROCKBOX_DIR "/pocketrock"
 #define POCKETROCK_LOG_DIR POCKETROCK_DIR "/logs"
 #define POCKETROCK_LOG POCKETROCK_LOG_DIR "/runtime.log"
@@ -34,9 +29,23 @@ int pocketrock_guest_run(struct pocketrock_request *request)
 { (void)request; return POCKETROCK_EXIT_CRASH; }
 void pocketrock_guest_destroy(void) { }
 const char *pocketrock_guest_error(void) { return "PocketJS runtime unavailable"; }
+size_t pocketrock_guest_heap_peak(void) { return 0; }
+size_t pocketrock_guest_heap_size(void) { return 0; }
 #endif
 
 static int arena_handle = -1;
+
+static void recovery_message(const char *title, const char *detail)
+{
+    lcd_clear_display();
+    lcd_setfont(FONT_SYSFIXED);
+    lcd_putsxy(8, 8, "PocketRock recovery");
+    lcd_hline(8, LCD_WIDTH - 9, 26);
+    lcd_putsxy(8, 42, title);
+    if (detail && detail[0] != '\0')
+        lcd_putsxy(8, 62, detail);
+    lcd_update();
+}
 
 static void log_line(const char *message)
 {
@@ -61,6 +70,12 @@ static void log_line(const char *message)
 
 static void release_guest(void)
 {
+    char memory[96];
+    snprintf(memory, sizeof(memory), "memory: arena=%luKiB heap-peak=%luKiB/%luKiB",
+        (unsigned long)(POCKETROCK_ARENA_MAX / 1024u),
+        (unsigned long)(pocketrock_guest_heap_peak() / 1024u),
+        (unsigned long)(pocketrock_guest_heap_size() / 1024u));
+    log_line(memory);
     pocketrock_guest_destroy();
     if (arena_handle >= 0) {
         core_unpin(arena_handle);
@@ -91,10 +106,6 @@ bool pocketrock_recovery_requested(void)
     return (button_status() & BUTTON_MENU) != 0;
 }
 
-MENUITEM_STRINGLIST(pocketrock_recovery_menu, "PocketRock recovery", NULL,
-    "Disable third-party apps", "Clear recent app", "Native file browser",
-    "USB mode", "Restart", "Power off");
-
 static void set_third_party_disabled(void)
 {
     mkdir(POCKETROCK_DIR);
@@ -104,43 +115,68 @@ static void set_third_party_disabled(void)
         close(fd);
     }
     pocketrock_service_return_to_shell();
-    splash(HZ, "Pocket apps disabled");
+    recovery_message("Third-party apps disabled", "Returning to recovery");
+    sleep(HZ);
 }
 
 static void recovery_menu(void)
 {
-    pocketrock_apply_native_theme(!(audio_status() & AUDIO_STATUS_PLAY));
+    static const char *const entries[] = {
+        "Disable third-party apps",
+        "Clear recent app",
+        "USB mode",
+        "Restart",
+        "Power off",
+    };
+    int selected = 0;
     while (true) {
-        switch (do_menu(&pocketrock_recovery_menu, NULL, NULL, false)) {
+        lcd_clear_display();
+        lcd_setfont(FONT_SYSFIXED);
+        lcd_putsxy(8, 6, "PocketRock recovery");
+        lcd_hline(8, LCD_WIDTH - 9, 23);
+        for (int i = 0; i < (int)ARRAYLEN(entries); ++i) {
+            int y = 36 + i * 24;
+            if (i == selected) {
+                lcd_set_foreground(LCD_RGBPACK(35, 120, 212));
+                lcd_fillrect(4, y - 4, LCD_WIDTH - 8, 21);
+                lcd_set_foreground(LCD_WHITE);
+            } else {
+                lcd_set_foreground(LCD_BLACK);
+            }
+            lcd_putsxy(10, y, entries[i]);
+        }
+        lcd_set_foreground(LCD_BLACK);
+        lcd_putsxy(8, LCD_HEIGHT - 18, "Wheel: move  Select: choose");
+        lcd_update();
+        long button = button_get(true);
+        if (button == BUTTON_SCROLL_BACK) {
+            if (--selected < 0) selected = ARRAYLEN(entries) - 1;
+            continue;
+        }
+        if (button == BUTTON_SCROLL_FWD) {
+            selected = (selected + 1) % ARRAYLEN(entries);
+            continue;
+        }
+        if (button != BUTTON_SELECT)
+            continue;
+        switch (selected) {
         case 0:
             set_third_party_disabled();
             break;
         case 1:
             pocketrock_service_return_to_shell();
-            splash(HZ, "Recent app cleared");
+            recovery_message("Recent app cleared", "Returning to recovery");
+            sleep(HZ);
             break;
         case 2:
-        {
-            struct browse_context browse = {
-                .dirfilter = SHOW_ALL,
-                .title = "Files",
-                .icon = Icon_Folder,
-                .root = "/",
-            };
-            rockbox_browse(&browse);
-            break;
-        }
-        case 3:
             gui_usb_screen_run(false, 0);
             break;
-        case 4:
+        case 3:
             sys_reboot();
             break;
-        case 5:
+        case 4:
             sys_poweroff();
             break;
-        default:
-            return;
         }
     }
 }
@@ -150,8 +186,9 @@ void pocketrock_main(void)
     struct pocketrock_request request;
     int crash_count = 0;
     /* Standard Rockbox may have loaded a user theme from config.cfg during
-       early boot. PocketRock never inherits it: our fixed compatibility theme
-       becomes the native state before recovery or any .rock plugin can draw. */
+       early boot. PocketRock never inherits it: the fixed compatibility theme
+       is used only by recovery and native .rock plugins. The system shell is
+       always rendered by PocketJS. */
     pocketrock_apply_native_theme(true);
     if (pocketrock_recovery_requested()) {
         log_line("boot: Menu held; native recovery");
@@ -161,7 +198,8 @@ void pocketrock_main(void)
         memset(&request, 0, sizeof(request));
         if (!create_guest()) {
             log_line("shell: runtime arena/create failed; native recovery");
-            splash(HZ * 2, "PocketRock recovery");
+            recovery_message("QuickJS could not start", "8 MiB arena unavailable");
+            sleep(HZ * 2);
             recovery_menu();
         }
         int result = pocketrock_guest_run(&request);
@@ -193,7 +231,8 @@ void pocketrock_main(void)
                 continue;
             }
             if (++crash_count >= 3) {
-                splash(HZ * 2, "PocketRock recovery: 3 crashes");
+                recovery_message("QuickJS crashed three times", "Entering recovery");
+                sleep(HZ * 2);
                 recovery_menu();
             }
             continue;

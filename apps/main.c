@@ -329,10 +329,14 @@ static int INIT_ATTR init_dircache(bool preinit)
             if (result > 0)
             {
                 /* Print "Scanning disk..." to the display. */
+#ifndef POCKETROCK_MINIMAL_UI
                 splash(0, str(LANG_SCANNING_DISK));
+#endif
                 dircache_wait();
                 backlight_on();
+#ifndef POCKETROCK_MINIMAL_UI
                 show_logo_boot();
+#endif
             }
 
             struct dircache_info info;
@@ -377,6 +381,7 @@ static void init_tagcache(void)
                 talk_number(tagcache_get_max_commit_step(), true);
             }
 #endif
+#ifndef POCKETROCK_MINIMAL_UI
             if (lang_is_rtl())
             {
                 splash_progress(ret, tagcache_get_max_commit_step(),
@@ -390,16 +395,19 @@ static void init_tagcache(void)
                                 tagcache_get_max_commit_step());
             }
             clear = true;
+#endif
         }
         sleep(HZ/4);
     }
     tagtree_init();
 
+#ifndef POCKETROCK_MINIMAL_UI
     if (clear)
     {
         backlight_on();
         show_logo_boot();
     }
+#endif
 }
 #endif /* HAVE_TAGCACHE */
 
@@ -734,7 +742,9 @@ static void init(void)
     (button_hold()))
 #endif
     {
+#ifndef POCKETROCK_MINIMAL_UI
         splash(HZ*2, str(LANG_RESET_DONE_CLEAR));
+#endif
         settings_reset();
     }
 #endif
@@ -778,13 +788,14 @@ static void init(void)
     playlist_init();
     tree_mem_init();
     filetype_init();
-
     shortcuts_init();
 
     CHART(">audio_init");
     audio_init();
     CHART("<audio_init");
+#ifndef POCKETROCK_MINIMAL_UI
     talk_announce_voice_invalid(); /* notify user w/ voice prompt if voice file invalid */
+#endif
 
 #ifdef HAVE_WIFI
     wifi_init();
@@ -810,9 +821,11 @@ static void init(void)
     check_bootfile(false); /* remember write time and filesize */
     CHART(">check_bootfile(false)");
 #endif
+#ifndef POCKETROCK_MINIMAL_UI
     CHART("<settings_apply_skins");
     settings_apply_skins();
     CHART(">settings_apply_skins");
+#endif
 }
 
 #ifdef CPU_PP

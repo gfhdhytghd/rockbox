@@ -18,7 +18,7 @@
 #error PocketRock requires a 320x240 RGB565 framebuffer
 #endif
 
-#define POCKETROCK_THREAD_STACK (1024u * 1024u)
+#define POCKETROCK_THREAD_STACK (512u * 1024u)
 #define POCKETROCK_ANALOG_CENTER 0x80008000u
 
 extern const unsigned char pocketrock_shell_bytecode[];
@@ -28,7 +28,9 @@ extern const unsigned int pocketrock_shell_pak_len;
 
 static fb_data display[LCD_WIDTH * LCD_HEIGHT] MEM_ALIGN_ATTR;
 static unsigned char *thread_stack;
+static void *guest_heap;
 static size_t guest_heap_size;
+static size_t guest_heap_peak;
 static int guest_result;
 static bool runtime_ready;
 static bool boosted;
@@ -182,7 +184,9 @@ int pocketrock_guest_create(void *arena, size_t size)
         return -1;
     thread_stack = arena;
     void *heap = (unsigned char *)arena + POCKETROCK_THREAD_STACK;
+    guest_heap = heap;
     guest_heap_size = size - POCKETROCK_THREAD_STACK;
+    guest_heap_peak = 0;
     return init_memory_pool(guest_heap_size, heap) == (size_t)-1 ? -1 : 0;
 }
 
@@ -203,6 +207,17 @@ int pocketrock_guest_run(struct pocketrock_request *request)
 
 const char *pocketrock_guest_error(void) { return guest_error; }
 
+size_t pocketrock_guest_heap_peak(void)
+{
+    if (guest_heap) {
+        size_t peak = get_max_size(guest_heap);
+        if (peak > guest_heap_peak) guest_heap_peak = peak;
+    }
+    return guest_heap_peak;
+}
+
+size_t pocketrock_guest_heap_size(void) { return guest_heap_size; }
+
 void pocketrock_guest_destroy(void)
 {
     set_boost(false);
@@ -213,5 +228,6 @@ void pocketrock_guest_destroy(void)
     package_pak = NULL;
     active_request = NULL;
     thread_stack = NULL;
+    guest_heap = NULL;
     guest_heap_size = 0;
 }
