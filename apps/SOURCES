@@ -16,6 +16,24 @@ gesture.c
 #endif
 language.c
 main.c
+#ifdef IPOD_6G
+pocketrock/pocketrock.c
+pocketrock/package.c
+#ifdef HAVE_POCKETROCK_RUNTIME
+pocketrock/runtime.c
+pocketrock/services.c
+pocketrock/generated/app_data.c
+pocketrock/generated/runtime_port.c
+pocketrock/generated/service_bridge.c
+pocketrock/generated/firmware_compat.c
+pocketrock/generated/qjs_quickjs.c
+pocketrock/generated/qjs_cutils.c
+pocketrock/generated/qjs_libregexp.c
+pocketrock/generated/qjs_libunicode.c
+pocketrock/generated/qjs_dtoa.c
+pocketrock/generated/tlsf.c
+#endif
+#endif
 menu.c
 menus/menu_common.c
 menus/display_menu.c

@@ -77,6 +77,9 @@
 #include "bootchart.h"
 #include "logdiskf.h"
 #include "bootdata.h"
+#ifdef IPOD_6G
+#include "pocketrock/pocketrock.h"
+#endif
 #if defined(HAVE_DEVICEDATA)
 #include "devicedata.h"
 #endif
@@ -244,7 +247,11 @@ int main(void)
     /* no calls INIT_ATTR functions after this point anymore!
      * see definition of INIT_ATTR in config.h */
     CHART(">root_menu");
+#ifdef IPOD_6G
+    pocketrock_main();
+#else
     root_menu();
+#endif
 }
 
 /* The disk isn't ready at boot, rblogo is stored in bin and erased after boot */
