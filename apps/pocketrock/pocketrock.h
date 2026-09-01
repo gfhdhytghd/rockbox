@@ -12,6 +12,8 @@ enum pocketrock_exit {
     POCKETROCK_EXIT_NATIVE = 1,
     POCKETROCK_EXIT_CRASH = 2,
     POCKETROCK_EXIT_PACKAGE = 3,
+    POCKETROCK_EXIT_REBOOT = 4,
+    POCKETROCK_EXIT_POWEROFF = 5,
 };
 
 struct pocketrock_request {

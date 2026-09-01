@@ -152,6 +152,14 @@ void pocketrock_main(void)
         int result = pocketrock_guest_run(&request);
         bool was_package = pocketrock_service_active_package()[0] != '\0';
         release_guest();
+        if (result == POCKETROCK_EXIT_REBOOT || result == POCKETROCK_EXIT_POWEROFF) {
+            log_line(result == POCKETROCK_EXIT_REBOOT ?
+                "system: reboot after JS arena release" :
+                "system: poweroff after JS arena release");
+            if (result == POCKETROCK_EXIT_REBOOT) sys_reboot();
+            else sys_poweroff();
+            while (true) sleep(HZ);
+        }
         if (result == POCKETROCK_EXIT_NATIVE && request.plugin[0] != '\0') {
             log_line("native plugin: JS arena released");
             plugin_load(request.plugin, request.parameter[0] ? request.parameter : NULL);

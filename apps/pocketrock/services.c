@@ -402,10 +402,12 @@ const char *pocketrock_service_call(
         return "{\"ok\":true}";
     }
     if (!strcmp(service, "system") && !strcmp(method, "powerOff")) {
-        sys_poweroff(); return "{\"ok\":true}";
+        pending_exit = POCKETROCK_EXIT_POWEROFF;
+        return "{\"ok\":true}";
     }
     if (!strcmp(service, "system") && !strcmp(method, "reboot")) {
-        sys_reboot(); return "{\"ok\":true}";
+        pending_exit = POCKETROCK_EXIT_REBOOT;
+        return "{\"ok\":true}";
     }
     if (!strcmp(service, "launcher") && !strcmp(method, "restoreSessionState"))
         return "{\"state\":null}";
