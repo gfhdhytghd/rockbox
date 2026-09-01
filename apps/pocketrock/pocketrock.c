@@ -11,7 +11,10 @@
 #include "pocketrock.h"
 #include "theme.h"
 
-#define POCKETROCK_ARENA_MAX (8u * 1024u * 1024u)
+#ifndef POCKETROCK_ARENA_MIB
+#define POCKETROCK_ARENA_MIB 12u
+#endif
+#define POCKETROCK_ARENA_MAX (POCKETROCK_ARENA_MIB * 1024u * 1024u)
 #define POCKETROCK_DIR ROCKBOX_DIR "/pocketrock"
 #define POCKETROCK_LOG_DIR POCKETROCK_DIR "/logs"
 #define POCKETROCK_LOG POCKETROCK_LOG_DIR "/runtime.log"
@@ -198,7 +201,7 @@ void pocketrock_main(void)
         memset(&request, 0, sizeof(request));
         if (!create_guest()) {
             log_line("shell: runtime arena/create failed; native recovery");
-            recovery_message("QuickJS could not start", "8 MiB arena unavailable");
+            recovery_message("QuickJS could not start", "12 MiB arena unavailable");
             sleep(HZ * 2);
             recovery_menu();
         }

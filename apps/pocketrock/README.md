@@ -1,6 +1,6 @@
 # PocketRock firmware adapter
 
-This directory is the GPL Rockbox side of PocketRock. It owns the 8 MiB
+This directory is the GPL Rockbox side of PocketRock. It owns the 12 MiB
 `core_alloc` arena, package validation, adaptive render loop, Rockbox services,
 native plugin handoff, logging, and recovery UI. QuickJS, PocketJS runtime
 sources, the Rust core archive, and embedded Shell data are generated from the
