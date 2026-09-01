@@ -13,3 +13,9 @@ of linking an incomplete JavaScript host.
 
 Build orchestration and the pinned dependency revisions are documented in the
 PocketJS repository at `docs/POCKETROCK.md`.
+
+The standard Rockbox root menu is never entered in a PocketRock build. It is
+still linked because the stable `.rock` plugin API exposes root-menu helper
+pointers. Recovery calls the file browser directly, and native plugins receive
+PocketRock's forced palette/theme settings rather than the user's previously
+selected Rockbox theme.

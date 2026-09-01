@@ -19,6 +19,7 @@ main.c
 #ifdef IPOD_6G
 pocketrock/pocketrock.c
 pocketrock/package.c
+pocketrock/theme.c
 #ifdef HAVE_POCKETROCK_RUNTIME
 pocketrock/runtime.c
 pocketrock/services.c

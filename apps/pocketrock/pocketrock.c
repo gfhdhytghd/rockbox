@@ -8,11 +8,13 @@
 #include "menu.h"
 #include "plugin.h"
 #include "powermgmt.h"
-#include "root_menu.h"
 #include "splash.h"
 #include "system.h"
+#include "tree.h"
+#include "icon.h"
 #include "gui/usb_screen.h"
 #include "pocketrock.h"
+#include "theme.h"
 
 #define POCKETROCK_ARENA_MAX (16u * 1024u * 1024u)
 #define POCKETROCK_DIR ROCKBOX_DIR "/pocketrock"
@@ -107,6 +109,7 @@ static void set_third_party_disabled(void)
 
 static void recovery_menu(void)
 {
+    pocketrock_apply_native_theme(!(audio_status() & AUDIO_STATUS_PLAY));
     while (true) {
         switch (do_menu(&pocketrock_recovery_menu, NULL, NULL, false)) {
         case 0:
@@ -117,8 +120,16 @@ static void recovery_menu(void)
             splash(HZ, "Recent app cleared");
             break;
         case 2:
-            root_menu();
+        {
+            struct browse_context browse = {
+                .dirfilter = SHOW_ALL,
+                .title = "Files",
+                .icon = Icon_Folder,
+                .root = "/",
+            };
+            rockbox_browse(&browse);
             break;
+        }
         case 3:
             gui_usb_screen_run(false, 0);
             break;
@@ -138,6 +149,10 @@ void pocketrock_main(void)
 {
     struct pocketrock_request request;
     int crash_count = 0;
+    /* Standard Rockbox may have loaded a user theme from config.cfg during
+       early boot. PocketRock never inherits it: our fixed compatibility theme
+       becomes the native state before recovery or any .rock plugin can draw. */
+    pocketrock_apply_native_theme(true);
     if (pocketrock_recovery_requested()) {
         log_line("boot: Menu held; native recovery");
         recovery_menu();
@@ -162,7 +177,9 @@ void pocketrock_main(void)
         }
         if (result == POCKETROCK_EXIT_NATIVE && request.plugin[0] != '\0') {
             log_line("native plugin: JS arena released");
+            pocketrock_apply_native_theme(false);
             plugin_load(request.plugin, request.parameter[0] ? request.parameter : NULL);
+            pocketrock_apply_native_theme(false);
             crash_count = 0;
             continue;
         }
