@@ -6,7 +6,9 @@
 #include "lcd.h"
 #include "plugin.h"
 #include "powermgmt.h"
+#include "settings.h"
 #include "system.h"
+#include "usb.h"
 #include "gui/usb_screen.h"
 #include "pocketrock.h"
 #include "theme.h"
@@ -37,6 +39,18 @@ size_t pocketrock_guest_heap_size(void) { return 0; }
 #endif
 
 static int arena_handle = -1;
+
+static void force_mass_storage_usb(void)
+{
+#ifdef USB_ENABLE_HID
+    global_settings.usb_hid = false;
+    usb_set_hid(false);
+#endif
+#if defined(HAVE_USB_POWER) || defined(HAVE_USB_ADB)
+    global_settings.usb_mode = USB_MODE_MASS_STORAGE;
+    usb_set_mode(USB_MODE_MASS_STORAGE);
+#endif
+}
 
 static void recovery_message(const char *title, const char *detail)
 {
@@ -155,6 +169,10 @@ static void recovery_menu(void)
         lcd_putsxy(8, LCD_HEIGHT - 18, "Wheel: move  Select: choose");
         lcd_update();
         long button = button_get(true);
+        if (button == SYS_USB_CONNECTED) {
+            gui_usb_screen_run(false, button_get_data());
+            continue;
+        }
         if (button == BUTTON_SCROLL_BACK) {
             if (--selected < 0) selected = ARRAYLEN(entries) - 1;
             continue;
@@ -175,7 +193,8 @@ static void recovery_menu(void)
             sleep(HZ);
             break;
         case 2:
-            gui_usb_screen_run(false, 0);
+            recovery_message("Mass storage only", "Connect or reconnect USB");
+            sleep(HZ);
             break;
         case 3:
             sys_reboot();
@@ -196,6 +215,9 @@ void pocketrock_main(void)
        is used only by recovery and native .rock plugins. The system shell is
        always rendered by PocketJS. */
     pocketrock_apply_native_theme(true);
+    /* PocketRock never exposes the click wheel as a USB keyboard or media
+       controller. Recovery and the QuickJS shell are storage-only. */
+    force_mass_storage_usb();
     if (pocketrock_recovery_requested()) {
         log_line("boot: Menu held; native recovery");
         recovery_menu();
