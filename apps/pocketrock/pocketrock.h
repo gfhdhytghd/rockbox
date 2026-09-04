@@ -23,6 +23,7 @@ struct pocketrock_request {
 
 bool pocketrock_recovery_requested(void);
 void pocketrock_main(void) NORETURN_ATTR;
+bool pocketrock_usb_active(void);
 
 int pocketrock_guest_create(void *arena, size_t size);
 int pocketrock_guest_run(struct pocketrock_request *request);

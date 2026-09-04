@@ -52,6 +52,9 @@ static void recovery_message(const char *title, const char *detail)
 
 static void log_line(const char *message)
 {
+    /* Exclusive USB storage owns the volume until SYS_USB_DISCONNECTED. */
+    if (pocketrock_usb_active())
+        return;
     mkdir(POCKETROCK_DIR);
     mkdir(POCKETROCK_LOG_DIR);
     int fd = open(POCKETROCK_LOG, O_WRONLY | O_CREAT | O_APPEND, 0666);

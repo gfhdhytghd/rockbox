@@ -5,13 +5,20 @@
 #include "lcd.h"
 #include "misc.h"
 #include "file.h"
+#include "font.h"
 #include "system.h"
 #include "string.h"
 #include "string-extra.h"
+#include "ata_idle_notify.h"
+#include "open_plugin.h"
+#include "playlist.h"
 #include "pocketrock.h"
 #include "package.h"
 #include "pocket_runtime.h"
 #include "pocket_spec.h"
+#include "settings.h"
+#include "tree.h"
+#include "usb.h"
 #include <tlsf.h>
 
 #if LCD_WIDTH != 320 || LCD_HEIGHT != 240 || LCD_DEPTH != 16
@@ -38,6 +45,37 @@ static struct pocketrock_request *active_request;
 static unsigned char *package_bytecode;
 static unsigned char *package_pak;
 static char guest_error[256];
+static bool usb_active;
+static bool usb_pending;
+static intptr_t usb_pending_seqnum;
+
+bool pocketrock_usb_active(void) { return usb_active; }
+
+static void enter_usb_storage(intptr_t seqnum)
+{
+    if (usb_active)
+        return;
+    playlist_shutdown();
+    tree_flush();
+    open_plugin_cache_flush();
+    call_storage_idle_notifys(true);
+    /* PocketRock uses baked glyphs, but the native compatibility font cache
+       can still hold descriptors that must be closed before disk export. */
+    font_disable_all();
+    usb_active = true;
+    usb_acknowledge(SYS_USB_CONNECTED_ACK, seqnum);
+}
+
+static void leave_usb_storage(void)
+{
+    if (!usb_active)
+        return;
+    usb_active = false;
+    font_enable_all();
+    settings_apply(true);
+    playlist_resume();
+    tree_restore();
+}
 
 void *pocket_host_alloc(size_t size) { return tlsf_malloc(size); }
 void *pocket_host_realloc(void *pointer, size_t size) { return tlsf_realloc(pointer, size); }
@@ -83,7 +121,8 @@ static void runtime_thread(void)
     const unsigned char *pak = pocketrock_shell_pak;
     size_t pak_len = pocketrock_shell_pak_len;
     const char *package_path = pocketrock_service_active_package();
-    if (package_path && *package_path) {
+    const bool running_package = package_path && *package_path;
+    if (running_package) {
         struct pocketrock_package package;
         if (pocketrock_package_open(package_path, &package) < 0)
             return;
@@ -113,6 +152,11 @@ static void runtime_thread(void)
         return;
     }
     backlight_on();
+    if (usb_pending) {
+        intptr_t seqnum = usb_pending_seqnum;
+        usb_pending = false;
+        enter_usb_storage(seqnum);
+    }
     while (true) {
         const int rate = high_load_frames > 0 ? 60 : 30;
         int timeout = (HZ - frame_credit + rate - 1) / rate;
@@ -126,15 +170,35 @@ static void runtime_thread(void)
             if (frame_credit > HZ * 2) frame_credit = HZ * 2;
         }
         if (event != BUTTON_NONE) {
+            if (event == SYS_USB_CONNECTED) {
+                intptr_t seqnum = button_get_data();
+                if (running_package) {
+                    /* Release package state and any package-owned files before
+                       handing the disk to USB. The next realm is the embedded
+                       Shell, which can render the USB surface without disk IO. */
+                    usb_pending_seqnum = seqnum;
+                    usb_pending = true;
+                    pocketrock_service_return_to_shell();
+                    guest_result = POCKETROCK_EXIT_SHELL;
+                    break;
+                }
+                enter_usb_storage(seqnum);
+                high_load_frames = 4;
+                if (frame_credit < HZ) frame_credit = HZ;
+                continue;
+            }
+            if (event == SYS_USB_DISCONNECTED) {
+                leave_usb_storage();
+                high_load_frames = 4;
+                if (frame_credit < HZ) frame_credit = HZ;
+                continue;
+            }
             if ((event & BUTTON_MENU) && (event & BUTTON_REPEAT)) {
                 pocketrock_service_return_to_shell();
                 guest_result = POCKETROCK_EXIT_SHELL;
                 break;
             }
-            if (default_event_handler(event) == SYS_USB_CONNECTED) {
-                guest_result = POCKETROCK_EXIT_SHELL;
-                break;
-            }
+            default_event_handler(event);
             pending_event |= (int)event;
             high_load_frames = (event & (BUTTON_SCROLL_FWD | BUTTON_SCROLL_BACK)) ? 20 : 4;
             if (frame_credit < HZ) frame_credit = HZ;

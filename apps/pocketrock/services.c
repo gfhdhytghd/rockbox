@@ -3,6 +3,7 @@
 #include "backlight.h"
 #include "dir.h"
 #include "file.h"
+#include "kernel.h"
 #include "metadata.h"
 #include "misc.h"
 #include "mv.h"
@@ -29,6 +30,9 @@ static size_t used;
 static int pending_exit;
 static char active_package[MAX_PATH];
 static struct pocketrock_request pending_request;
+static sector_t cached_total_sectors;
+static sector_t cached_free_sectors;
+static long next_storage_refresh;
 
 static void reset_response(void) { used = 0; response[0] = '\0'; }
 
@@ -327,17 +331,25 @@ static const char *library_page(const char *payload)
 
 static const char *system_snapshot(void)
 {
-    sector_t total = 0, free = 0;
-    volume_size(IF_MV(0,) &total, &free);
+    /* volume_size() may touch storage. Once mass storage is acknowledged the
+       host must not access the disk until SYS_USB_DISCONNECTED. */
+    if (!pocketrock_usb_active() &&
+        (cached_total_sectors == 0 || TIME_AFTER(current_tick, next_storage_refresh))) {
+        volume_size(IF_MV(0,) &cached_total_sectors, &cached_free_sectors);
+        next_storage_refresh = current_tick + 5 * HZ;
+    }
+    const char *usb_state = pocketrock_usb_active()
+        ? "mass-storage"
+        : usb_inserted() ? "connected" : "disconnected";
     reset_response();
     appendf("{\"batteryPercent\":%d,\"batteryMinutes\":%d,"
         "\"charging\":%s,\"freeBytes\":%llu,\"totalBytes\":%llu,"
         "\"backlight\":%s,\"usb\":\"%s\"}",
         battery_level(), battery_time(), charging_state() ? "true" : "false",
-        (unsigned long long)free * SECTOR_SIZE,
-        (unsigned long long)total * SECTOR_SIZE,
+        (unsigned long long)cached_free_sectors * SECTOR_SIZE,
+        (unsigned long long)cached_total_sectors * SECTOR_SIZE,
         is_backlight_on(false) ? "true" : "false",
-        usb_inserted() ? "connected" : "disconnected");
+        usb_state);
     return response;
 }
 
