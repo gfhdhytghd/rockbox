@@ -9,6 +9,18 @@
 INCLUDES += -I$(APPSDIR) $(patsubst %,-I$(APPSDIR)/%,$(subst :, ,$(APPEXTRA)))
 SRC += $(call preprocess, $(APPSDIR)/SOURCES)
 
+ifneq (,$(findstring -DHAVE_POCKETROCK_RUNTIME,$(EXTRA_DEFINES)))
+POCKETROCK_RUNTIME_SRC := $(APPSDIR)/pocketrock/generated/libpocketrock_runtime.a
+POCKETROCK_RUNTIME_LIB := $(BUILDDIR)/lib/libpocketrock_runtime.a
+CORE_LIBS += $(POCKETROCK_RUNTIME_LIB)
+INCLUDES += -I$(APPSDIR)/pocketrock/generated
+CORE_LDOPTS += -lm
+
+$(POCKETROCK_RUNTIME_LIB): $(POCKETROCK_RUNTIME_SRC)
+	$(SILENT)mkdir -p $(@D)
+	$(call PRINTS,CP $(@F))cp $< $@
+endif
+
 # apps/features.txt is a file that (is preprocessed and) lists named features
 # based on defines in the config-*.h files. The named features will be passed
 # to genlang and thus (translated) phrases can be used based on those names.
